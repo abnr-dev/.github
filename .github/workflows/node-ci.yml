@@ -1,0 +1,124 @@
+# Reusable Node.js CI workflow for abnr-dev repositories.
+# Call it from any repo with:
+#
+#   jobs:
+#     ci:
+#       uses: abnr-dev/.github/.github/workflows/node-ci.yml@main
+#
+# See README.md in this repo for all inputs and usage examples.
+name: Node CI (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version to use
+        type: string
+        default: "20"
+      working-directory:
+        description: Directory containing package.json
+        type: string
+        default: "."
+      run-lint:
+        description: Run the "lint" npm script (skipped automatically if the script does not exist)
+        type: boolean
+        default: true
+      run-typecheck:
+        description: Run the "typecheck" npm script (skipped automatically if the script does not exist)
+        type: boolean
+        default: true
+      run-tests:
+        description: Run the "test" npm script (skipped automatically if the script does not exist)
+        type: boolean
+        default: true
+      run-build:
+        description: Run the "build" npm script (skipped automatically if the script does not exist)
+        type: boolean
+        default: true
+      copy-env-example:
+        description: Copy .env.example to .env before building (for builds that need placeholder env vars)
+        type: boolean
+        default: false
+
+jobs:
+  ci:
+    name: lint / typecheck / test / build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect package manager
+        id: pm
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            echo "manager=pnpm" >> "$GITHUB_OUTPUT"
+            echo "install=pnpm install --frozen-lockfile" >> "$GITHUB_OUTPUT"
+            echo "cache=pnpm" >> "$GITHUB_OUTPUT"
+          elif [ -f yarn.lock ]; then
+            echo "manager=yarn" >> "$GITHUB_OUTPUT"
+            echo "install=yarn install --frozen-lockfile" >> "$GITHUB_OUTPUT"
+            echo "cache=yarn" >> "$GITHUB_OUTPUT"
+          elif [ -f package-lock.json ]; then
+            echo "manager=npm" >> "$GITHUB_OUTPUT"
+            echo "install=npm ci" >> "$GITHUB_OUTPUT"
+            echo "cache=npm" >> "$GITHUB_OUTPUT"
+          else
+            # No lockfile committed: fall back to npm install (no dependency cache).
+            echo "manager=npm" >> "$GITHUB_OUTPUT"
+            echo "install=npm install" >> "$GITHUB_OUTPUT"
+            echo "cache=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup pnpm
+        if: steps.pm.outputs.manager == 'pnpm'
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: ${{ steps.pm.outputs.cache }}
+          # Only used when a lockfile exists (cache != ''); at least one path always resolves then.
+          cache-dependency-path: |
+            ${{ inputs.working-directory }}/package-lock.json
+            ${{ inputs.working-directory }}/pnpm-lock.yaml
+            ${{ inputs.working-directory }}/yarn.lock
+
+      - name: Install dependencies
+        run: ${{ steps.pm.outputs.install }}
+
+      - name: Generate Prisma client
+        run: |
+          if [ -f prisma/schema.prisma ]; then
+            npx prisma generate
+          else
+            echo "No prisma/schema.prisma found, skipping."
+          fi
+
+      - name: Copy .env.example to .env
+        if: inputs.copy-env-example
+        run: |
+          if [ -f .env.example ]; then
+            cp .env.example .env
+          else
+            echo "No .env.example found, skipping."
+          fi
+
+      - name: Lint
+        if: inputs.run-lint
+        run: npm run lint --if-present
+
+      - name: Typecheck
+        if: inputs.run-typecheck
+        run: npm run typecheck --if-present
+
+      - name: Test
+        if: inputs.run-tests
+        run: npm run test --if-present
+
+      - name: Build
+        if: inputs.run-build
+        run: npm run build --if-present

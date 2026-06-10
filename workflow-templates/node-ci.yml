@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [$default-branch]
+  pull_request:
+    branches: [$default-branch]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: abnr-dev/.github/.github/workflows/node-ci.yml@main
+    with:
+      node-version: "20"
+      # All steps below skip automatically if the npm script does not exist.
+      run-lint: true
+      run-typecheck: true
+      run-tests: true
+      run-build: true
+      # Set to true if "build" needs placeholder env vars from .env.example.
+      copy-env-example: false

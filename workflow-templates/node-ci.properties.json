@@ -1,0 +1,6 @@
+{
+    "name": "ABNR Node CI",
+    "description": "Pipeline CI padrao da ABNR DEV para projetos Node.js/TypeScript: lint, typecheck, testes e build via workflow reutilizavel.",
+    "iconName": "octicon check-circle",
+    "categories": ["Node", "TypeScript", "JavaScript"]
+}
